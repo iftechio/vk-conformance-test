@@ -80,10 +80,12 @@ func (s *Suite) ExecInContainer(namespace, pod, container string, command []stri
 		Stdout: &outBuf,
 		Stderr: &errBuf,
 	})
+	stdout = strings.TrimSpace(outBuf.String())
+	stderr = strings.TrimSpace(errBuf.String())
 	if err != nil {
-		return "", "", err
+		return stdout, stderr, err
 	}
-	return strings.TrimSpace(outBuf.String()), strings.TrimSpace(errBuf.String()), nil
+	return stdout, stderr, nil
 }
 
 func (s *Suite) NodeName() string {
