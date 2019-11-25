@@ -8,5 +8,6 @@ import (
 
 type Tester interface {
 	Name() string
+	Description() string
 	Test(ctx context.Context, s *suite.Suite) error
 }

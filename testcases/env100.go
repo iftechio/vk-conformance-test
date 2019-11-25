@@ -19,6 +19,10 @@ type env100 struct {
 }
 
 func (c *env100) Name() string {
+	return "env100"
+}
+
+func (c *env100) Description() string {
 	return "container can have more than 100 env vars"
 }
 

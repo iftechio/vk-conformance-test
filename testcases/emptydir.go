@@ -20,6 +20,10 @@ type persistEmptyDir struct {
 }
 
 func (c *persistEmptyDir) Name() string {
+	return "emptydir"
+}
+
+func (c *persistEmptyDir) Description() string {
 	return "emptyDir should not be cleared after updating pod"
 }
 
@@ -80,9 +84,9 @@ func (c *persistEmptyDir) Test(ctx context.Context, s *suite.Suite) error {
 	if err != nil {
 		return fmt.Errorf("wait for pod: %s", err)
 	}
-	_, _, err = s.ExecInContainer(metav1.NamespaceDefault, podName, podName, []string{"sh", "-c", "cat /data/1.txt"})
+	_, stderr, err := s.ExecInContainer(metav1.NamespaceDefault, podName, podName, []string{"sh", "-c", "cat /data/1.txt"})
 	if err != nil {
-		return fmt.Errorf("exec: %s", err)
+		return fmt.Errorf("exec: %s: %s", err, stderr)
 	}
 	return nil
 }

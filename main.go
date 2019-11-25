@@ -7,7 +7,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 
 type testResult struct {
 	Name     string
+	Desc     string
 	Duration time.Duration
 	Err      error
 }
@@ -28,9 +31,16 @@ func main() {
 		nodeName   string
 		kubeconfig string
 		timeout    time.Duration
+		runTests   string
 	)
 
+	availTests := make([]string, 0, len(testcases.AvailableTests))
+	for name := range testcases.AvailableTests {
+		availTests = append(availTests, name)
+	}
+
 	flag.StringVar(&kubeconfig, "kubeconfig", filepath.Join(os.Getenv("HOME"), ".kube", "config"), "Path to the kubeconfig file to use for CLI requests.")
+	flag.StringVar(&runTests, "run", "", fmt.Sprintf("Regexp to match test names. Available tests: %s", strings.Join(availTests, ",")))
 	flag.StringVar(&nodeName, "nodename", "virtual-kubelet", "Target node name")
 	flag.DurationVar(&timeout, "test.timeout", time.Minute*5, "Timeout of each test")
 	flag.Parse()
@@ -43,25 +53,44 @@ func main() {
 	if err != nil {
 		log.Fatalf("create test suite: %s", err)
 	}
-	var wg sync.WaitGroup
-	rootCtx := context.TODO()
-	n := len(testcases.AvailableTests)
+
+	var (
+		wg            sync.WaitGroup
+		expectedTests []testcases.Tester
+		pattern       *regexp.Regexp
+		rootCtx       = context.TODO()
+	)
+	if len(runTests) != 0 {
+		pattern, err = regexp.Compile(runTests)
+		if err != nil {
+			log.Fatalf("invalid regexp: %s: %s", runTests, err)
+		}
+	} else {
+		pattern = regexp.MustCompile(".*")
+	}
+	for name, t := range testcases.AvailableTests {
+		if pattern.MatchString(name) {
+			expectedTests = append(expectedTests, t)
+		}
+	}
+	n := len(expectedTests)
 	wg.Add(n)
 	resultCh := make(chan testResult, n)
 	fmt.Printf("Running %d tests...\n", n)
-	for name, t := range testcases.AvailableTests {
-		go func(name string, t testcases.Tester) {
+	for _, t := range expectedTests {
+		go func(t testcases.Tester) {
 			defer wg.Done()
 			ctx, cancelF := context.WithTimeout(rootCtx, timeout)
 			defer cancelF()
 			begin := time.Now()
 			err := t.Test(ctx, s)
 			resultCh <- testResult{
-				Name:     name,
+				Name:     t.Name(),
+				Desc:     t.Description(),
 				Duration: time.Since(begin),
 				Err:      err,
 			}
-		}(name, t)
+		}(t)
 	}
 	wg.Wait()
 	close(resultCh)
@@ -94,6 +123,7 @@ func main() {
 		fmt.Printf("====== %d Test(s) failed\n", len(failList))
 		for _, r := range failList {
 			fmt.Printf("-----\t%s (%s)\n", r.Name, r.Duration)
+			fmt.Printf(">>>>>\t%s\n", r.Desc)
 			fmt.Println(r.Err.Error())
 		}
 	}
